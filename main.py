@@ -4,39 +4,48 @@ import requests
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from arcgis_utils import list_arcgis_layers, get_layer_url_and_json, search_feature_layer_by_title
+from arcgis_utils import search_feature_layer_by_title
 
 # Create a FastAPI application instance
 app = FastAPI(
-    title="MCP Server for ArcGIS",
-    description="An API that uses an LLM to call ArcGIS tools."
+    title="MCP Server for import layear from ArcGIS and create Sitetracker Layer",
+    description="An API that uses an LLM to call ArcGIS tools and create Sitetracker Layer"
 )
 
-# Endpoint to get layer URL and JSON by service and layer name
-@app.get("/api/arcgis_layer_info/{layer_name}")
-async def get_arcgis_layer_info(layer_name: str):
+# Tool function to create Sitetracker Layer based on ArcGIS layer
+def create_sitetracker_layer(layer_name: str) -> dict:
     """
-    Returns the ArcGIS layer URL and JSON for a given layer name.
+    Creates a new Sitetracker Layer based on the ArcGIS layer name.
+    This function simulates calling the Salesforce Apex method 'createSitetrackerMapLayer'.
+
+    Args:
+        layer_name: The name of the ArcGIS layer to create a Sitetracker Layer for.
     """
-    return get_layer_url_and_json(layer_name)
-
-# --- 2. DEFINE THE API SERVER (FastAPI) ---
-
-# Define the main API endpoint
-@app.get("/api/arcgis_layers/{layer_name}")
-async def get_arcgis_layers(layer_name: str):
-    """
-    Returns all layers in the given ArcGIS FeatureServer service.
-    """
-    return list_arcgis_layers(layer_name)
-
-# --- 1. CONFIGURE THE AI MODEL AND TOOLS ---
-
-# Configure the Gemini API key from environment variables
-try:
-    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-except KeyError:
-    raise ValueError("GOOGLE_API_KEY environment variable not set.")
+    print(f"TOOL EXECUTED: Creating Sitetracker Layer for '{layer_name}'...")
+    
+    try:
+        # In a real implementation, you would make a call to your Salesforce org
+        # using the Salesforce REST API to invoke the Apex method
+        # For example:
+        # POST to: https://your-org.salesforce.com/services/apexrest/StUserAssistant/createLayer
+        # with body: {"layerName": layer_name}
+        
+        # Return the layer name that should be created in Sitetracker
+        # The actual creation will be handled by your Apex code
+        sitetracker_layer_name = f"{layer_name}"
+        
+        response = {
+            "status": "success",
+            "sitetracker_layer_name": sitetracker_layer_name,
+            "message": f"Ready to create Sitetracker Layer: '{sitetracker_layer_name}'"
+        }
+        return response
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to create Sitetracker Layer for '{layer_name}': {str(e)}"
+        }
 
 # This is the tool function from our previous example.
 # It acts as a wrapper for your Salesforce Apex API call.
@@ -50,7 +59,7 @@ def load_arcGIS_layer(layer_name: str) -> dict:
     print(f"TOOL EXECUTED: Getting ArcGIS layer info for '{layer_name}'...")
     # Assume the service name is the same as the layer name for this use case
     # If you have a different mapping, adjust accordingly
-    from arcgis_utils import search_feature_layer_by_title
+    #from arcgis_utils import search_feature_layer_by_title
     result = search_feature_layer_by_title(layer_name)
     print(f"Result from search_feature_layer_by_title: {result}")
     # from arcgis_utils import get_layer_url_and_json
@@ -65,10 +74,10 @@ def load_arcGIS_layer(layer_name: str) -> dict:
     else:
         return result
 
-# Initialize the Generative Model with your tool
+# Initialize the Generative Model with your tools
 model = genai.GenerativeModel(
     model_name='gemini-2.5-pro',
-    tools=[load_arcGIS_layer]
+    tools=[load_arcGIS_layer, create_sitetracker_layer]
 )
 chat = model.start_chat()
 
@@ -76,14 +85,13 @@ chat = model.start_chat()
 
 # Create a FastAPI application instance
 app = FastAPI(
-    title="MCP Server for ArcGIS",
-    description="An API that uses an LLM to call ArcGIS tools."
+    title="MCP Server for import layear from ArcGIS and create Sitetracker Layer",
+    description="An API that uses an LLM to call ArcGIS tools and create Sitetracker Layer"
 )
 
 # Define the structure of the incoming request body
 class ChatRequest(BaseModel):
     prompt: str
-
 # Define the main API endpoint
 @app.post("/api/chat")
 async def handle_chat(request: ChatRequest):
@@ -109,6 +117,10 @@ async def handle_chat(request: ChatRequest):
         if tool_name == "load_arcGIS_layer":
             # Execute the function and get the result
             tool_response = load_arcGIS_layer(**tool_args)
+            return {"type": "tool_response", "data": tool_response}
+        elif tool_name == "create_sitetracker_layer":
+            # Execute the function and get the result
+            tool_response = create_sitetracker_layer(**tool_args)
             return {"type": "tool_response", "data": tool_response}
         else:
             raise HTTPException(status_code=400, detail=f"Unknown tool requested: {tool_name}")
